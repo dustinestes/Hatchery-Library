@@ -9,8 +9,7 @@
   <img alt="Hatchery" src=".hatchery/branding/logos/hatchery-logo-light.svg" height="200">
 </picture>
 
-<p><strong>Hatchery Library</strong></p>
-<p>Sample Clutches, scripts, and media for Hatchery Forge connections</p>
+<p><strong>Hatch. Provision. Scale.</strong></p>
 
 <br/>
 
