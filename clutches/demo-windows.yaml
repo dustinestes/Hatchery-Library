@@ -1,0 +1,30 @@
+# Demo Clutch for Hatchery Library shopping (Forge list / pull).
+#
+# References Library basenames after you pull Scripts + Media into
+# the operator cache. tiny.iso is a 50-byte fixture for catalog demos -
+# replace os_media with a real Windows eval ISO before hatching.
+#
+# See README.md for Forge connection and binding filters.
+
+name: demo-windows
+description: Sample Windows Clutch shipped with Hatchery Library
+
+vms:
+  - name: win11-demo
+    os: win11
+    vcpus: 2
+    ram_gb: 4
+    disk_gb: 40
+    os_media: tiny.iso
+    virtio_drivers: virtio-win-0.1.285_slim.iso
+    admin_username: admin
+    automations:
+      - name: configure-vm-basics-windows.ps1
+        reboot_after: true
+        parameters:
+          ComputerName: win11demo
+          TimeZone: "UTC"
+      - name: enable-rdp-windows.ps1
+      - name: install-virtio-drivers-windows.ps1
+        parameters:
+          IsoLabel: "virtio-win"
