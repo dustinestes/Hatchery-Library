@@ -92,7 +92,10 @@ media/
 software/
   Hatchery.SoftwareExample.1.0.0/
     software.yaml
-    windows/     *.msi + install.ps1
+    windows/
+      x86/   Hatchery.SoftwareExample.1.0.0-x86.msi
+      x64/   Hatchery.SoftwareExample.1.0.0-x64.msi
+      arm64/ Hatchery.SoftwareExample.1.0.0-arm64.msi
 ```
 
 ### Basename rule
@@ -132,7 +135,7 @@ Retry demos write a flag under the guest OS temp directory (`$env:TEMP` on Windo
 | `clutches/demo-windows.yaml` | Single-VM sample Clutch (Library shopping) |
 | `media/iso/tiny.iso` | 50-byte fixture for Available / pull / provenance demos - **not** a bootable Windows image |
 | `media/virtio/virtio-win-0.1.285_slim.iso` | Slim VirtIO drivers ISO (~29MB) for Media → VirtIO bindings |
-| `software/Hatchery.SoftwareExample.1.0.0/` | Multi-arch MSI sample (x86 / x64 / ARM64) for Software inventory and Library pull |
+| `software/Hatchery.SoftwareExample.1.0.0/` | Multi-arch MSI sample (`platforms.windows.{x86,x64,arm64}`) for Software inventory and Library pull |
 
 Replace `os_media` in the demo Clutch with a real Windows eval ISO before hatching a guest. VirtIO attribution: [NOTICE.md](NOTICE.md).
 
@@ -144,9 +147,10 @@ Replace `os_media` in the demo Clutch with a real Windows eval ISO before hatchi
 | Publisher | Hatchery |
 | Product | Software Example |
 | Version | 1.0.0 |
-| Architectures | x86, x64, ARM64 (same ProductCode; `install.ps1` picks MSI by guest arch) |
+| Architectures | `x86`, `x64`, `arm64` under `platforms.windows` (same ProductCode; arch-tagged MSI per `windows/{arch}/`) |
+| Schema | Matches Hatchery [#471](https://github.com/dustinestes/Hatchery/issues/471) (`platforms.{os}.{arch}`; no `hatchery.architecture`; no guest-side arch picker) |
 
-Pull with binding filter `*software/*`, then use Inventory Import or Content → Available to exercise the Software domain.
+Pull with binding filter `*software/*`, then use Inventory Import or Content → Available to exercise the Software domain. Hatch stages only the guest-arch subtree (Hatchery [#474](https://github.com/dustinestes/Hatchery/issues/474)).
 
 ---
 
