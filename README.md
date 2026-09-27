@@ -26,7 +26,7 @@
 
 ---
 
-**Hatchery Library** is a public sample catalog you add as a Hatchery **Forge** connection. Pull Scripts, Clutches, and Media into the operator cache for demos, docs screenshots, and onboarding - without inventing your first repo.
+**Hatchery Library** is a public sample catalog you add as a Hatchery **Forge** connection. Pull Scripts, Clutches, Media, and Software into the operator cache for demos, docs screenshots, and onboarding - without inventing your first repo.
 
 Hatchery remains a **Library consumer** only. This repo is content; Hatchery does not push back to it.
 
@@ -39,7 +39,8 @@ Hatchery remains a **Library consumer** only. This repo is content; Hatchery doe
 - **Scripts** - guest automation samples for Windows (PowerShell), Linux, and macOS (bash)
 - **Clutches** - a demo Windows Clutch that references Library basenames after pull
 - **Media** - a tiny ISO fixture for catalog demos, plus a slim VirtIO drivers ISO
-- **Forge-ready** - path layout matches Hatchery binding filters for Scripts / Clutches / Media
+- **Software** - a multi-arch MSI sample package (`Hatchery.SoftwareExample.1.0.0`) for inventory / Library pull validation
+- **Forge-ready** - path layout matches Hatchery binding filters for Scripts / Clutches / Media / Software
 
 ---
 
@@ -53,7 +54,7 @@ In Hatchery (Library enabled):
 2. Type **Forge**, provider **GitHub**
 3. Base URI: `https://github.com/dustinestes/Hatchery-Library` (or `dustinestes/Hatchery-Library`)
 4. Token: optional for this public repo (helps with GitHub rate limits)
-5. Kinds: scripts, clutches, media
+5. Kinds: scripts, clutches, media, software
 6. Add bindings (filters below), **Test**, then pull from **Library → Content → Available**
 
 ### Suggested binding filters
@@ -66,6 +67,7 @@ In Hatchery (Library enabled):
 | Clutches | `clutches/**/*.yaml` | Demo Clutch YAML |
 | Media (ISO) | `media/iso/**/*.iso` | Binding target **iso** |
 | Media (VirtIO) | `media/virtio/**/*.iso` | Binding target **virtio** |
+| Software | `*software/*` | Package units (dir with `software.yaml`) |
 
 Public list/pull works without a PAT. Private forks need a token with contents read.
 
@@ -87,13 +89,19 @@ clutches/
 media/
   iso/         tiny.iso
   virtio/      virtio-win-0.1.285_slim.iso
+software/
+  Hatchery.SoftwareExample.1.0.0/
+    software.yaml
+    windows/     *.msi + install.ps1
 ```
 
 ### Basename rule
 
-Hatchery identifies cache files by **basename + SHA-256**. Directories are dropped on pull. Every file in this repo has a **unique basename** (OS suffixes: `-windows`, `-linux`, `-macos`) so Linux and macOS scripts do not collide in `automation/scripts/`.
+Hatchery identifies cache files by **basename + SHA-256**. Directories are dropped on pull for Scripts / Clutches / Media. Every file in those domains has a **unique basename** (OS suffixes: `-windows`, `-linux`, `-macos`) so Linux and macOS scripts do not collide in `automation/scripts/`.
 
-Do not add two files that share the same leaf name under different folders.
+**Software** is different: Hatchery catalogs and pulls **package units** (a directory containing `software.yaml`), preserving the whole tree under `automation/software/{id}/`.
+
+Do not add two Scripts/Clutches/Media files that share the same leaf name under different folders.
 
 ---
 
@@ -117,15 +125,28 @@ Retry demos write a flag under the guest OS temp directory (`$env:TEMP` on Windo
 
 <br/>
 
-## Clutch and media
+## Clutch, media, and software
 
 | Path | Role |
 |---|---|
 | `clutches/demo-windows.yaml` | Single-VM sample Clutch (Library shopping) |
 | `media/iso/tiny.iso` | 50-byte fixture for Available / pull / provenance demos - **not** a bootable Windows image |
 | `media/virtio/virtio-win-0.1.285_slim.iso` | Slim VirtIO drivers ISO (~29MB) for Media → VirtIO bindings |
+| `software/Hatchery.SoftwareExample.1.0.0/` | Multi-arch MSI sample (x86 / x64 / ARM64) for Software inventory and Library pull |
 
 Replace `os_media` in the demo Clutch with a real Windows eval ISO before hatching a guest. VirtIO attribution: [NOTICE.md](NOTICE.md).
+
+### Software Example package
+
+| Field | Value |
+|---|---|
+| Package id | `Hatchery.SoftwareExample.1.0.0` |
+| Publisher | Hatchery |
+| Product | Software Example |
+| Version | 1.0.0 |
+| Architectures | x86, x64, ARM64 (same ProductCode; `install.ps1` picks MSI by guest arch) |
+
+Pull with binding filter `*software/*`, then use Inventory Import or Content → Available to exercise the Software domain.
 
 ---
 
@@ -137,7 +158,7 @@ Replace `os_media` in the demo Clutch with a real Windows eval ISO before hatchi
 flowchart LR
   HL["Hatchery Library<br/>this repo"]
   H["Hatchery Controller<br/>Forge connection"]
-  Cache["Operator cache<br/>scripts / clutches / media"]
+  Cache["Operator cache<br/>scripts / clutches / media / software"]
 
   HL -->|"list / pull"| H
   H --> Cache
