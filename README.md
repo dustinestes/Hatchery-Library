@@ -93,9 +93,9 @@ software/
   Hatchery.SoftwareExample.1.0.0/
     software.yaml
     windows/
-      x86/   Setup.msi
-      x64/   Setup.msi
-      arm64/ Setup.msi
+      x86/   Hatchery.SoftwareExample.1.0.0-x86.msi
+      x64/   Hatchery.SoftwareExample.1.0.0-x64.msi
+      arm64/ Hatchery.SoftwareExample.1.0.0-arm64.msi
 ```
 
 ### Basename rule
@@ -147,7 +147,7 @@ Replace `os_media` in the demo Clutch with a real Windows eval ISO before hatchi
 | Publisher | Hatchery |
 | Product | Software Example |
 | Version | 1.0.0 |
-| Architectures | `x86`, `x64`, `arm64` under `platforms.windows` (same ProductCode; payloads in `windows/{arch}/Setup.msi`) |
+| Architectures | `x86`, `x64`, `arm64` under `platforms.windows` (same ProductCode; arch-tagged MSI per `windows/{arch}/`) |
 | Schema | Matches Hatchery [#471](https://github.com/dustinestes/Hatchery/issues/471) (`platforms.{os}.{arch}`; no `hatchery.architecture`; no guest-side arch picker) |
 
 Pull with binding filter `*software/*`, then use Inventory Import or Content → Available to exercise the Software domain. Hatch stages only the guest-arch subtree (Hatchery [#474](https://github.com/dustinestes/Hatchery/issues/474)).

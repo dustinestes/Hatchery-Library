@@ -2,6 +2,7 @@
 # Package id (folder): Hatchery.SoftwareExample.1.0.0
 # ProductCode (all arches): {3624F187-6C0A-4D29-BF3C-207C0981DE15}
 # Layout matches Hatchery #471: platforms.{os}.{arch} + payloads under windows/{arch}/.
+# Arch-tagged MSI leaf names match typical vendor builds; install.command differs per unit.
 hatchery:
   kind: software
   publisher: Hatchery
@@ -9,10 +10,10 @@ hatchery:
   version: "1.0.0"
 platforms:
   windows:
-    x86: &windows_unit
+    x86:
       pre_install: []
       install:
-        command: 'msiexec.exe /i .\Setup.msi /qn /norestart'
+        command: 'msiexec.exe /i .\Hatchery.SoftwareExample.1.0.0-x86.msi /qn /norestart'
         success_exit_codes: [0]
         reboot_after: false
       post_install: []
@@ -28,5 +29,41 @@ platforms:
             \"HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\"
           );
           if ($paths | Where-Object { Test-Path $_ }) { exit 0 } else { exit 1 }"
-    x64: *windows_unit
-    arm64: *windows_unit
+    x64:
+      pre_install: []
+      install:
+        command: 'msiexec.exe /i .\Hatchery.SoftwareExample.1.0.0-x64.msi /qn /norestart'
+        success_exit_codes: [0]
+        reboot_after: false
+      post_install: []
+      uninstall:
+        command: 'msiexec.exe /x {3624F187-6C0A-4D29-BF3C-207C0981DE15} /qn /norestart'
+        success_exit_codes: [0, 1605]
+      detect:
+        command: >-
+          powershell -NoProfile -Command
+          "$p='{3624F187-6C0A-4D29-BF3C-207C0981DE15}';
+          $paths=@(
+            \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\",
+            \"HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\"
+          );
+          if ($paths | Where-Object { Test-Path $_ }) { exit 0 } else { exit 1 }"
+    arm64:
+      pre_install: []
+      install:
+        command: 'msiexec.exe /i .\Hatchery.SoftwareExample.1.0.0-arm64.msi /qn /norestart'
+        success_exit_codes: [0]
+        reboot_after: false
+      post_install: []
+      uninstall:
+        command: 'msiexec.exe /x {3624F187-6C0A-4D29-BF3C-207C0981DE15} /qn /norestart'
+        success_exit_codes: [0, 1605]
+      detect:
+        command: >-
+          powershell -NoProfile -Command
+          "$p='{3624F187-6C0A-4D29-BF3C-207C0981DE15}';
+          $paths=@(
+            \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\",
+            \"HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\"
+          );
+          if ($paths | Where-Object { Test-Path $_ }) { exit 0 } else { exit 1 }"
