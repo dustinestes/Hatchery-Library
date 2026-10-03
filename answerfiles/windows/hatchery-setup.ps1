@@ -78,8 +78,20 @@ function Invoke-Step {
 Write-Log "INFO" "setup" "Hatchery first boot setup started"
 
 Invoke-Step 0 { Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private }
-Invoke-Step 1 { Enable-PSRemoting -Force }
-Invoke-Step 2 { New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'LocalAccountTokenFilterPolicy' -Value 1 -PropertyType DWORD -Force }
+Invoke-Step 1 {
+    Enable-PSRemoting -Force
+    # Headroom for Software payload staging over WinRM Send (Controller raises
+    # this again at stage time if needed; set here so fresh guests are ready).
+    $need = 8192
+    $cur = [int](Get-Item -Path 'WSMan:\localhost\MaxEnvelopeSizekb').Value
+    if ($cur -lt $need) {
+        Set-Item -Path 'WSMan:\localhost\MaxEnvelopeSizekb' -Value $need
+    }
+}
+Invoke-Step 2 {
+    New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' `
+        -Name 'LocalAccountTokenFilterPolicy' -Value 1 -PropertyType DWORD -Force
+}
 Invoke-Step 3 { New-NetFirewallRule -Name 'Hatchery-WinRM-HTTP' -DisplayName 'Hatchery - WinRM HTTP' -Description 'Inbound WinRM rule created by Hatchery via unattend.xml FirstLogonCommands during automated OS provisioning.' -Direction Inbound -Protocol TCP -LocalPort 5985 -Action Allow -Enabled True }
 Invoke-Step 4 { Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 }
 Invoke-Step 5 { Set-Service -Name sshd -StartupType Automatic }

@@ -27,6 +27,21 @@ try {
     } else {
         Write-HatchEvent "Hatchery guest directory not found -- nothing to remove" -Level WARN
     }
+
+    # Optional: remove persisted reserved Machine env vars written at hatch (#501 / ADR-0026).
+    # Directory wipe above is the default cleanup path. Uncomment to also clear env:
+    #
+    # foreach ($name in @(
+    #     'HATCHERY_ROOT',
+    #     'HATCHERY_LOGS',
+    #     'HATCHERY_TEMP',
+    #     'HATCHERY_SOFTWARE'
+    # )) {
+    #     [Environment]::SetEnvironmentVariable($name, $null, 'Machine')
+    #     Remove-Item -Path "Env:$name" -ErrorAction SilentlyContinue
+    # }
+    # Write-HatchEvent "Cleared persisted Hatchery Machine environment variables"
+
     exit 0
 } catch {
     Write-HatchEvent "Cleanup failed: $_" -Level ERROR

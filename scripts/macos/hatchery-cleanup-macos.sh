@@ -26,4 +26,14 @@ if [[ "$removed" -eq 0 ]]; then
 else
   echo "Hatchery guest directory removed"
 fi
+
+# Optional: remove persisted reserved env vars when macOS persist lands (#501 / #482).
+# Directory wipe above is the default cleanup path. Uncomment / adapt when used:
+#
+# for name in HATCHERY_ROOT HATCHERY_LOGS HATCHERY_TEMP HATCHERY_SOFTWARE; do
+#   # e.g. remove from /etc/paths.d or a launchd plist Hatchery wrote
+#   unset "$name" || true
+# done
+# echo "Cleared persisted Hatchery environment variables (stub)"
+
 exit 0
