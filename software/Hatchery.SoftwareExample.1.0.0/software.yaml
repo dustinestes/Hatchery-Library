@@ -3,6 +3,10 @@
 # ProductCode (all arches): {3624F187-6C0A-4D29-BF3C-207C0981DE15}
 # Layout matches Hatchery #471: platforms.{os}.{arch} + payloads under windows/{arch}/.
 # Arch-tagged MSI leaf names match typical vendor builds; install.command differs per unit.
+# install: msiexec + /l*v via $env:HATCHERY_SOFTWARE_LOG (Hatchery #501 reserved env).
+# Avoid Start-Process -Wait over WinRM: msiexec can hang on a filtered admin token.
+# detect: compact ARP scan (Publisher + DisplayName + DisplayVersion), not ProductCode.
+# Env names are cross-guest; Windows units use PowerShell $env:; POSIX units would use $NAME.
 hatchery:
   kind: software
   publisher: Hatchery
@@ -13,57 +17,114 @@ platforms:
     x86:
       pre_install: []
       install:
-        command: 'msiexec.exe /i .\Hatchery.SoftwareExample.1.0.0-x86.msi /qn /norestart'
+        command: |
+          $msi = Join-Path -Path $env:HATCHERY_SOFTWARE_PACKAGE -ChildPath 'Hatchery.SoftwareExample.1.0.0-x86.msi'
+          if (-not (Test-Path -LiteralPath $msi)) {
+            Write-Error "package missing: $msi"
+            exit 1619
+          }
+          $log = $env:HATCHERY_SOFTWARE_LOG
+          $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
+          msiexec.exe /i $msi /qn /norestart /l*v $log
+          exit [int]$LASTEXITCODE
         success_exit_codes: [0]
         reboot_after: false
       post_install: []
       uninstall:
-        command: 'msiexec.exe /x {3624F187-6C0A-4D29-BF3C-207C0981DE15} /qn /norestart'
+        command: |
+          $log = $env:HATCHERY_SOFTWARE_LOG
+          $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
+          msiexec.exe /x '{3624F187-6C0A-4D29-BF3C-207C0981DE15}' /qn /norestart /l*v $log
+          exit [int]$LASTEXITCODE
         success_exit_codes: [0, 1605]
       detect:
-        command: >-
-          powershell -NoProfile -Command
-          "$p='{3624F187-6C0A-4D29-BF3C-207C0981DE15}';
-          $paths=@(
-            \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\",
-            \"HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\"
-          );
-          if ($paths | Where-Object { Test-Path $_ }) { exit 0 } else { exit 1 }"
+        command: |
+          $pub='Hatchery'; $name='Software Example'; $ver='1.0.0'
+          foreach ($root in @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )) {
+            Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+              $i = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+              if ($i.Publisher -like $pub -and $i.DisplayName -like $name -and "$($i.DisplayVersion)" -eq $ver) {
+                exit 0
+              }
+            }
+          }
+          exit 1
     x64:
       pre_install: []
       install:
-        command: 'msiexec.exe /i .\Hatchery.SoftwareExample.1.0.0-x64.msi /qn /norestart'
+        command: |
+          $msi = Join-Path -Path $env:HATCHERY_SOFTWARE_PACKAGE -ChildPath 'Hatchery.SoftwareExample.1.0.0-x64.msi'
+          if (-not (Test-Path -LiteralPath $msi)) {
+            Write-Error "package missing: $msi"
+            exit 1619
+          }
+          $log = $env:HATCHERY_SOFTWARE_LOG
+          $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
+          msiexec.exe /i $msi /qn /norestart /l*v $log
+          exit [int]$LASTEXITCODE
         success_exit_codes: [0]
         reboot_after: false
       post_install: []
       uninstall:
-        command: 'msiexec.exe /x {3624F187-6C0A-4D29-BF3C-207C0981DE15} /qn /norestart'
+        command: |
+          $log = $env:HATCHERY_SOFTWARE_LOG
+          $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
+          msiexec.exe /x '{3624F187-6C0A-4D29-BF3C-207C0981DE15}' /qn /norestart /l*v $log
+          exit [int]$LASTEXITCODE
         success_exit_codes: [0, 1605]
       detect:
-        command: >-
-          powershell -NoProfile -Command
-          "$p='{3624F187-6C0A-4D29-BF3C-207C0981DE15}';
-          $paths=@(
-            \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\",
-            \"HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\"
-          );
-          if ($paths | Where-Object { Test-Path $_ }) { exit 0 } else { exit 1 }"
+        command: |
+          $pub='Hatchery'; $name='Software Example'; $ver='1.0.0'
+          foreach ($root in @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )) {
+            Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+              $i = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+              if ($i.Publisher -like $pub -and $i.DisplayName -like $name -and "$($i.DisplayVersion)" -eq $ver) {
+                exit 0
+              }
+            }
+          }
+          exit 1
     arm64:
       pre_install: []
       install:
-        command: 'msiexec.exe /i .\Hatchery.SoftwareExample.1.0.0-arm64.msi /qn /norestart'
+        command: |
+          $msi = Join-Path -Path $env:HATCHERY_SOFTWARE_PACKAGE -ChildPath 'Hatchery.SoftwareExample.1.0.0-arm64.msi'
+          if (-not (Test-Path -LiteralPath $msi)) {
+            Write-Error "package missing: $msi"
+            exit 1619
+          }
+          $log = $env:HATCHERY_SOFTWARE_LOG
+          $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
+          msiexec.exe /i $msi /qn /norestart /l*v $log
+          exit [int]$LASTEXITCODE
         success_exit_codes: [0]
         reboot_after: false
       post_install: []
       uninstall:
-        command: 'msiexec.exe /x {3624F187-6C0A-4D29-BF3C-207C0981DE15} /qn /norestart'
+        command: |
+          $log = $env:HATCHERY_SOFTWARE_LOG
+          $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
+          msiexec.exe /x '{3624F187-6C0A-4D29-BF3C-207C0981DE15}' /qn /norestart /l*v $log
+          exit [int]$LASTEXITCODE
         success_exit_codes: [0, 1605]
       detect:
-        command: >-
-          powershell -NoProfile -Command
-          "$p='{3624F187-6C0A-4D29-BF3C-207C0981DE15}';
-          $paths=@(
-            \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\",
-            \"HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$p\"
-          );
-          if ($paths | Where-Object { Test-Path $_ }) { exit 0 } else { exit 1 }"
+        command: |
+          $pub='Hatchery'; $name='Software Example'; $ver='1.0.0'
+          foreach ($root in @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )) {
+            Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+              $i = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+              if ($i.Publisher -like $pub -and $i.DisplayName -like $name -and "$($i.DisplayVersion)" -eq $ver) {
+                exit 0
+              }
+            }
+          }
+          exit 1
