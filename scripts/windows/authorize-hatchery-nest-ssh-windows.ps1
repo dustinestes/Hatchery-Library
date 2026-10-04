@@ -1,6 +1,7 @@
 # ============================================================
 # authorize-hatchery-nest-ssh-windows.ps1
-# Nest-plane: ensure OpenSSH Server and trust a Controller remoting
+# Nest-plane: ensure OpenSSH Server is already installed (ARP / path /
+# service - never Add-WindowsCapability) and trust a Controller remoting
 # identity public key (authorized_keys).
 #
 # Run on the Windows Nest host (manual, MDM, or hatch automation).
@@ -72,32 +73,74 @@ function Resolve-PublicKeyLine {
     return $first
 }
 
+function Test-OpenSshArpPresent {
+    <#
+    .SYNOPSIS
+      True when OpenSSH appears in Win32 ARP (Uninstall registry), same family of
+      detect used for Software packages / hatch skip-if-present.
+    .NOTES
+      Win32-OpenSSH MSI (Hatchery ADR-0029 / #518) registers under Uninstall.
+      Do not use Add-WindowsCapability here - FoD conflicts with an MSI install.
+    #>
+    foreach ($root in @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+        )) {
+        $keys = Get-ChildItem $root -ErrorAction SilentlyContinue
+        foreach ($key in $keys) {
+            $i = Get-ItemProperty $key.PSPath -ErrorAction SilentlyContinue
+            if (-not $i) { continue }
+            $name = [string]$i.DisplayName
+            if ($name -and ($name -like '*OpenSSH*')) {
+                return $true
+            }
+        }
+    }
+    return $false
+}
+
 function Ensure-OpenSshServer {
-    Write-HatchEvent "Checking OpenSSH Server" -Component "NestSSH"
-    $capability = Get-WindowsCapability -Online |
-        Where-Object { $_.Name -like "OpenSSH.Server*" } |
-        Select-Object -First 1
-    if ($capability -and $capability.State -ne "Installed") {
-        Write-HatchEvent "Installing OpenSSH.Server Windows capability" -Component "NestSSH"
-        Add-WindowsCapability -Online -Name $capability.Name | Out-Null
+    # Detect only - never Add-WindowsCapability (FoD). Nest hosts should already
+    # have Win32-OpenSSH MSI (or equivalent); FoD install fights that layout.
+    Write-HatchEvent "Checking OpenSSH Server (ARP / path / service)" -Component "NestSSH"
+
+    $sshdExe = Join-Path $env:ProgramFiles "OpenSSH\sshd.exe"
+    $arpPresent = Test-OpenSshArpPresent
+    $pathPresent = Test-Path -LiteralPath $sshdExe
+    $sshd = Get-Service -Name sshd -ErrorAction SilentlyContinue
+
+    if ($arpPresent) {
+        Write-HatchEvent "OpenSSH found in ARP (Uninstall)" -Component "NestSSH"
+    }
+    if ($pathPresent) {
+        Write-HatchEvent "OpenSSH Server binary present at $sshdExe" -Component "NestSSH"
     }
 
-    $sshd = Get-Service -Name sshd -ErrorAction SilentlyContinue
-    if (-not $sshd) {
-        # MSI / non-FoD install may still register the service later; try path
-        $msiSshd = Join-Path $env:ProgramFiles "OpenSSH\sshd.exe"
-        if (Test-Path -LiteralPath $msiSshd) {
-            Write-HatchEvent "OpenSSH binary present; ensuring sshd service" -Component "NestSSH"
-            & "$env:ProgramFiles\OpenSSH\install-sshd.ps1" -ErrorAction SilentlyContinue
+    if (-not $arpPresent -and -not $pathPresent -and -not $sshd) {
+        throw (
+            "OpenSSH Server is not installed (no ARP entry, no $sshdExe, no sshd service). " +
+            "Install Win32-OpenSSH Server (GitHub MSI / Hatchery first-boot path), then re-run. " +
+            "This script does not call Add-WindowsCapability."
+        )
+    }
+
+    if (-not $sshd -and $pathPresent) {
+        $installSshd = Join-Path $env:ProgramFiles "OpenSSH\install-sshd.ps1"
+        if (Test-Path -LiteralPath $installSshd) {
+            Write-HatchEvent "sshd service missing; running install-sshd.ps1" -Component "NestSSH"
+            & $installSshd
             $sshd = Get-Service -Name sshd -ErrorAction SilentlyContinue
         }
     }
     if (-not $sshd) {
-        throw "OpenSSH Server (sshd) is not available. Install OpenSSH Server, then re-run."
+        throw (
+            "OpenSSH appears installed but the sshd service is missing. " +
+            "Repair the OpenSSH Server install, then re-run."
+        )
     }
 
     Set-Service -Name sshd -StartupType Automatic
-    if ($sshd.Status -ne "Running") {
+    if ((Get-Service -Name sshd).Status -ne "Running") {
         Start-Service -Name sshd
     }
     Write-HatchEvent "sshd is running" -Component "NestSSH"
