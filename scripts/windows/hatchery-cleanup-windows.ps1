@@ -1,7 +1,8 @@
 # ============================================================
 # hatchery-cleanup-windows.ps1
 # Restores UAC policy lowered at first boot (#543 / Library #8),
-# then removes the Hatchery guest directory and all its contents.
+# removes the Hatchery guest directory, and clears persisted reserved
+# Machine env vars (HATCHERY_ROOT / _LOGS / _TEMP / _SOFTWARE; ADR-0026).
 #
 # Add this as the LAST script in your Clutch's automations list
 # if you want to remove all Hatchery artifacts from the guest
@@ -141,27 +142,25 @@ $script:Steps = @(
             }
         }
     }
-    # Optional: clear persisted reserved Machine env vars (#501 / ADR-0026).
-    # Directory wipe above is the default cleanup path. Uncomment to also clear env:
-    #
-    # [pscustomobject]@{
-    #     Name      = "Clear Hatchery Machine environment variables"
-    #     Component = "cleanup"
-    #     Status    = "[ ]"
-    #     Action    = {
-    #         foreach ($name in @(
-    #             'HATCHERY_ROOT',
-    #             'HATCHERY_LOGS',
-    #             'HATCHERY_TEMP',
-    #             'HATCHERY_SOFTWARE'
-    #         )) {
-    #             [Environment]::SetEnvironmentVariable($name, $null, 'Machine')
-    #             Remove-Item -Path "Env:$name" -ErrorAction SilentlyContinue
-    #         }
-    #         Write-HatchEvent "Cleared persisted Hatchery Machine environment variables" `
-    #             -Component 'cleanup'
-    #     }
-    # }
+    # Clear persisted reserved Machine env vars (#501 / ADR-0026).
+    [pscustomobject]@{
+        Name      = "Clear Hatchery Machine environment variables"
+        Component = "cleanup"
+        Status    = "[ ]"
+        Action    = {
+            foreach ($name in @(
+                'HATCHERY_ROOT',
+                'HATCHERY_LOGS',
+                'HATCHERY_TEMP',
+                'HATCHERY_SOFTWARE'
+            )) {
+                [Environment]::SetEnvironmentVariable($name, $null, 'Machine')
+                Remove-Item -Path "Env:$name" -ErrorAction SilentlyContinue
+            }
+            Write-HatchEvent "Cleared persisted Hatchery Machine environment variables" `
+                -Component 'cleanup'
+        }
+    }
 )
 
 function Show-Steps {
