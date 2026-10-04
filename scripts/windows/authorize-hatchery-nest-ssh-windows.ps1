@@ -1,8 +1,13 @@
 # ============================================================
 # authorize-hatchery-nest-ssh-windows.ps1
-# Nest-plane: ensure OpenSSH Server is already installed (ARP / path /
-# service - never Add-WindowsCapability) and trust a Controller remoting
-# identity public key (authorized_keys).
+# Nest-plane: ensure OpenSSH Server is present and trust a Controller
+# remoting identity public key (authorized_keys).
+#
+# Detect (do not reinstall over either layout):
+#   - ARP Uninstall entry (Win32-OpenSSH MSI)
+#   - FoD OpenSSH.Server capability Installed
+# If neither is present, bootstrap with the same GitHub Win64 MSI path as
+# hatchery-setup-windows.ps1 (ADR-0029). Never Add-WindowsCapability.
 #
 # Run on the Windows Nest host (manual, MDM, or hatch automation).
 # Copy the pubkey from Hatchery Settings → Security (remoting identity)
@@ -76,11 +81,9 @@ function Resolve-PublicKeyLine {
 function Test-OpenSshArpPresent {
     <#
     .SYNOPSIS
-      True when OpenSSH appears in Win32 ARP (Uninstall registry), same family of
-      detect used for Software packages / hatch skip-if-present.
+      True when OpenSSH appears in Win32 ARP (Uninstall registry).
     .NOTES
       Win32-OpenSSH MSI (Hatchery ADR-0029 / #518) registers under Uninstall.
-      Do not use Add-WindowsCapability here - FoD conflicts with an MSI install.
     #>
     foreach ($root in @(
             'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -99,38 +102,130 @@ function Test-OpenSshArpPresent {
     return $false
 }
 
-function Ensure-OpenSshServer {
-    # Detect only - never Add-WindowsCapability (FoD). Nest hosts should already
-    # have Win32-OpenSSH MSI (or equivalent); FoD install fights that layout.
-    Write-HatchEvent "Checking OpenSSH Server (ARP / path / service)" -Component "NestSSH"
+function Test-OpenSshFodPresent {
+    <#
+    .SYNOPSIS
+      True when OpenSSH.Server Windows capability is Installed (FoD).
+    .NOTES
+      Detect only - never Add-WindowsCapability. MSI must not overlay FoD.
+    #>
+    if (-not (Get-Command Get-WindowsCapability -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+    $capability = Get-WindowsCapability -Online -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like 'OpenSSH.Server*' } |
+        Select-Object -First 1
+    return [bool]($capability -and $capability.State -eq 'Installed')
+}
 
-    $sshdExe = Join-Path $env:ProgramFiles "OpenSSH\sshd.exe"
+function Install-HatcheryOpenSshServerFromGitHub {
+    <#
+    .SYNOPSIS
+      Install OpenSSH Server from the latest PowerShell/Win32-OpenSSH Win64 MSI.
+      Same bootstrap as answerfiles/windows/hatchery-setup-windows.ps1 (ADR-0029).
+    #>
+    $ProgressPreference = 'SilentlyContinue'
+
+    $api = 'https://api.github.com/repos/PowerShell/Win32-OpenSSH/releases/latest'
+    Write-HatchEvent "Resolving latest OpenSSH Win64 MSI from GitHub releases" -Component "NestSSH"
+    $headers = @{
+        'User-Agent' = 'Hatchery-nest-prep'
+        'Accept'     = 'application/vnd.github+json'
+    }
+    $release = Invoke-RestMethod -Uri $api -Headers $headers
+    $asset = @(
+        $release.assets |
+            Where-Object { $_.name -like 'OpenSSH-Win64-*.msi' }
+    ) | Select-Object -First 1
+    if (-not $asset) {
+        throw "No OpenSSH-Win64-*.msi asset on release $($release.tag_name)"
+    }
+
+    $msi = Join-Path $env:TEMP $asset.name
+    Write-HatchEvent (
+        "Downloading OpenSSH MSI tag=$($release.tag_name) asset=$($asset.name) " +
+        "bytes=$($asset.size)"
+    ) -Component "NestSSH"
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $msi -UseBasicParsing `
+        -Headers @{ 'User-Agent' = 'Hatchery-nest-prep' }
+
+    if (-not (Test-Path -LiteralPath $msi) -or ((Get-Item -LiteralPath $msi).Length -lt 1MB)) {
+        throw "Downloaded MSI missing or too small: $msi"
+    }
+
+    $msiLog = Join-Path $env:TEMP 'hatchery-openssh-msi.log'
+    Write-HatchEvent "Running msiexec ADDLOCAL=Server for $($asset.name)" -Component "NestSSH"
+    $p = Start-Process -FilePath 'msiexec.exe' `
+        -ArgumentList "/i `"$msi`" ADDLOCAL=Server /qn /norestart /l*v `"$msiLog`"" `
+        -Wait -PassThru
+    if ($p.ExitCode -notin 0, 3010) {
+        throw "msiexec OpenSSH Server failed exit $($p.ExitCode); see $msiLog"
+    }
+    Write-HatchEvent "msiexec finished exit=$($p.ExitCode) tag=$($release.tag_name)" `
+        -Component "NestSSH"
+
+    $sshDir = Join-Path ${env:ProgramFiles} 'OpenSSH'
+    if (-not (Test-Path -LiteralPath (Join-Path $sshDir 'sshd.exe'))) {
+        throw "sshd.exe not found after MSI install under $sshDir"
+    }
+    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    if ($machinePath -notlike "*$sshDir*") {
+        [Environment]::SetEnvironmentVariable(
+            'Path',
+            ($machinePath.TrimEnd(';') + ';' + $sshDir),
+            'Machine'
+        )
+        Write-HatchEvent "Appended $sshDir to Machine PATH" -Component "NestSSH"
+    }
+
+    try {
+        Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue
+    } catch { }
+}
+
+function Ensure-OpenSshServer {
+    # Detect ARP (MSI) and FoD. Never Add-WindowsCapability. MSI bootstrap only
+    # when neither install route is already present (do not overlay FoD with MSI).
+    Write-HatchEvent "Checking OpenSSH Server (ARP / FoD / path / service)" -Component "NestSSH"
+
+    $msiSshdExe = Join-Path $env:ProgramFiles "OpenSSH\sshd.exe"
+    $fodSshdExe = Join-Path $env:SystemRoot "System32\OpenSSH\sshd.exe"
     $arpPresent = Test-OpenSshArpPresent
-    $pathPresent = Test-Path -LiteralPath $sshdExe
+    $fodPresent = Test-OpenSshFodPresent
+    $pathPresent = (Test-Path -LiteralPath $msiSshdExe) -or (Test-Path -LiteralPath $fodSshdExe)
     $sshd = Get-Service -Name sshd -ErrorAction SilentlyContinue
 
     if ($arpPresent) {
-        Write-HatchEvent "OpenSSH found in ARP (Uninstall)" -Component "NestSSH"
+        Write-HatchEvent "OpenSSH found in ARP (MSI / Uninstall) - skipping install" -Component "NestSSH"
+    }
+    if ($fodPresent) {
+        Write-HatchEvent "OpenSSH.Server FoD capability Installed - skipping MSI (do not overlay FoD)" `
+            -Component "NestSSH"
     }
     if ($pathPresent) {
-        Write-HatchEvent "OpenSSH Server binary present at $sshdExe" -Component "NestSSH"
+        $shown = if (Test-Path -LiteralPath $msiSshdExe) { $msiSshdExe } else { $fodSshdExe }
+        Write-HatchEvent "OpenSSH Server binary present at $shown" -Component "NestSSH"
     }
 
-    if (-not $arpPresent -and -not $pathPresent -and -not $sshd) {
-        throw (
-            "OpenSSH Server is not installed (no ARP entry, no $sshdExe, no sshd service). " +
-            "Install Win32-OpenSSH Server (GitHub MSI / Hatchery first-boot path), then re-run. " +
-            "This script does not call Add-WindowsCapability."
-        )
+    $alreadyInstalled = $arpPresent -or $fodPresent -or ($pathPresent -and $sshd)
+    if (-not $alreadyInstalled) {
+        Write-HatchEvent "OpenSSH not detected - bootstrapping Win32-OpenSSH MSI (same as hatchery-setup)" `
+            -Component "NestSSH"
+        Install-HatcheryOpenSshServerFromGitHub
+        $sshd = Get-Service -Name sshd -ErrorAction SilentlyContinue
+        $pathPresent = Test-Path -LiteralPath $msiSshdExe
     }
 
-    if (-not $sshd -and $pathPresent) {
+    if (-not $sshd -and (Test-Path -LiteralPath $msiSshdExe)) {
         $installSshd = Join-Path $env:ProgramFiles "OpenSSH\install-sshd.ps1"
         if (Test-Path -LiteralPath $installSshd) {
             Write-HatchEvent "sshd service missing; running install-sshd.ps1" -Component "NestSSH"
             & $installSshd
             $sshd = Get-Service -Name sshd -ErrorAction SilentlyContinue
         }
+    }
+    if (-not $sshd) {
+        $sshd = Get-Service -Name sshd -ErrorAction SilentlyContinue
     }
     if (-not $sshd) {
         throw (
