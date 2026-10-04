@@ -26,8 +26,6 @@
 #     - name: hatchery-cleanup-windows.ps1
 # ============================================================
 
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$Host.UI.RawUI.WindowTitle = "Hatchery - Cleanup"
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -43,12 +41,31 @@ $script:DefaultConsent = 5
 $script:DefaultSecureDesktop = 1
 $script:SysPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
 
+# Guest transport (SSH/WinRM) runs NonInteractive - Clear-Host / RawUI / prompts throw.
+# Keep the console banner only for a real local ConsoleHost session.
+$script:InteractiveUi = $false
 try {
-    $Host.UI.RawUI.BackgroundColor = "Black"
-    $Host.UI.RawUI.ForegroundColor = "White"
-} catch { }
+    $script:InteractiveUi = (
+        [Environment]::UserInteractive -and
+        $Host.Name -eq 'ConsoleHost' -and
+        $Host.UI.RawUI -and
+        -not [Environment]::GetEnvironmentVariable('HATCHERY_NONINTERACTIVE')
+    )
+} catch {
+    $script:InteractiveUi = $false
+}
+
+if ($script:InteractiveUi) {
+    try {
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        $Host.UI.RawUI.WindowTitle = "Hatchery - Cleanup"
+        $Host.UI.RawUI.BackgroundColor = "Black"
+        $Host.UI.RawUI.ForegroundColor = "White"
+    } catch { }
+}
 
 function Show-HatcheryBanner {
+    if (-not $script:InteractiveUi) { return }
     Write-Host @"
  _   _    _  _____  ____ _   _ _____ ______   __
 | | | |  / \|_   _|/ ___| | | | ____|  _ \ \ / /
@@ -149,25 +166,29 @@ $script:Steps = @(
 
 function Show-Steps {
     param([string]$Footer = "")
-    try { Clear-Host } catch { }
-    Show-HatcheryBanner
-    Write-Host ("-" * 50) -ForegroundColor DarkGray
-    Write-Host "  $script:UiTitle" -ForegroundColor White
-    Write-Host ("-" * 50) -ForegroundColor DarkGray
-    Write-Host "  Guest root: $script:HatcheryRoot" -ForegroundColor DarkGray
-    Write-Host ("-" * 50) -ForegroundColor DarkGray
-    for ($i = 0; $i -lt $script:Steps.Count; $i++) {
-        $step = $script:Steps[$i]
-        $color = switch ($step.Status) {
-            "[>]" { "Yellow" }
-            "[+]" { "Green" }
-            "[!]" { "Red" }
-            default { "DarkGray" }
+    # Never let console UI fail a remoting run (NonInteractive / no RawUI).
+    try {
+        if (-not $script:InteractiveUi) { return }
+        Clear-Host
+        Show-HatcheryBanner
+        Write-Host ("-" * 50) -ForegroundColor DarkGray
+        Write-Host "  $script:UiTitle" -ForegroundColor White
+        Write-Host ("-" * 50) -ForegroundColor DarkGray
+        Write-Host "  Guest root: $script:HatcheryRoot" -ForegroundColor DarkGray
+        Write-Host ("-" * 50) -ForegroundColor DarkGray
+        for ($i = 0; $i -lt $script:Steps.Count; $i++) {
+            $step = $script:Steps[$i]
+            $color = switch ($step.Status) {
+                "[>]" { "Yellow" }
+                "[+]" { "Green" }
+                "[!]" { "Red" }
+                default { "DarkGray" }
+            }
+            Write-Host ("  {0} {1}. {2}" -f $step.Status, ($i + 1), $step.Name) -ForegroundColor $color
         }
-        Write-Host ("  {0} {1}. {2}" -f $step.Status, ($i + 1), $step.Name) -ForegroundColor $color
-    }
-    Write-Host ("-" * 50) -ForegroundColor DarkGray
-    if ($Footer) { Write-Host "  $Footer" -ForegroundColor White }
+        Write-Host ("-" * 50) -ForegroundColor DarkGray
+        if ($Footer) { Write-Host "  $Footer" -ForegroundColor White }
+    } catch { }
 }
 
 function Invoke-Step {
@@ -184,6 +205,7 @@ function Invoke-Step {
         & $Step.Action
         $Step.Status = "[+]"
         Write-HatchEvent "Step succeeded: $($Step.Name)" -Component $Step.Component
+        Show-Steps
     } catch {
         $Step.Status = "[!]"
         Write-HatchEvent "Step failed: $($Step.Name) -- $_" -Level ERROR -Component $Step.Component
