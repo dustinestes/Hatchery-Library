@@ -1,8 +1,11 @@
 # ============================================================
 # hatchery-cleanup-windows.ps1
 # Restores UAC policy lowered at first boot (#543 / Library #8),
-# removes the Hatchery guest directory, and clears persisted reserved
-# Machine env vars (HATCHERY_ROOT / _LOGS / _TEMP / _SOFTWARE; ADR-0026).
+# unloads the Hatchery PowerShell module, removes Hatchery's
+# PSModulePath append, removes the Hatchery guest directory
+# (modules\Hatchery\… from ensure; #554 / ADR-0032), and clears
+# persisted reserved Machine env vars (HATCHERY_ROOT / _LOGS /
+# _TEMP / _SOFTWARE / _MODULES; ADR-0026).
 #
 # Add this as the LAST script in your Clutch's automations list
 # if you want to remove all Hatchery artifacts from the guest
@@ -13,15 +16,16 @@
 # record containing:
 #   logs\hatchery-setup-windows.log - first-boot setup steps
 #   logs\<script-name>.log          - per-script automation events
+#   modules\Hatchery\               - ensure-installed PowerShell module
 #   temp\hatchery-uac-policy.json   - prior UAC values (when set)
 # and UAC stays at Never notify (lab/dev posture from setup).
 #
 # Conventions (aligned with hatchery-setup-windows.ps1):
-#   - Use Write-HatchEvent for progress lines (injected by Hatchery)
+#   - Use Write-HatchEvent for progress lines (Hatchery module / PSModulePath)
 #   - $ErrorActionPreference = "Stop"
 #   - Keep each step's Name + Action on the same object so commenting
 #     out a step cannot desync labels from Invoke-Step indexes
-#   - Prefer HATCHERY_* env (persisted before automations, ADR-0026)
+#   - Prefer HATCHERY_* env (ensure job before automations, ADR-0026/0032)
 #
 #   automations:
 #     - name: hatchery-cleanup-windows.ps1
@@ -35,6 +39,11 @@ $ProgressPreference = "SilentlyContinue"
 $script:HatcheryRoot = if ($env:HATCHERY_ROOT) { $env:HATCHERY_ROOT } else { "C:\Program Files\Hatchery" }
 $script:HatcheryLogs = if ($env:HATCHERY_LOGS) { $env:HATCHERY_LOGS } else { Join-Path $script:HatcheryRoot "logs" }
 $script:HatcheryTemp = if ($env:HATCHERY_TEMP) { $env:HATCHERY_TEMP } else { Join-Path $script:HatcheryRoot "temp" }
+$script:HatcheryModules = if ($env:HATCHERY_MODULES) {
+    $env:HATCHERY_MODULES
+} else {
+    Join-Path $script:HatcheryRoot "modules"
+}
 $script:UiTitle = "Cleanup"
 
 # Windows default slider: "Notify me only when apps try to make changes".
@@ -142,23 +151,43 @@ $script:Steps = @(
             }
         }
     }
-    # Clear persisted reserved Machine env vars (#501 / ADR-0026).
+    # After the tree is gone, unload the module and strip Machine env / PSModulePath.
+    # Prefer Write-Output [HATCH:…] here - Write-HatchEvent may no longer autoload.
     [pscustomobject]@{
-        Name      = "Clear Hatchery Machine environment variables"
+        Name      = "Unload Hatchery module and clear Machine env"
         Component = "cleanup"
         Status    = "[ ]"
         Action    = {
+            Remove-Module -Name Hatchery -Force -ErrorAction SilentlyContinue
+            Write-Output "[HATCH:INFO][cleanup] Removed Hatchery module from this session (if loaded)"
+
+            $modulesDir = $script:HatcheryModules
+            $machinePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+            if ($machinePath) {
+                $next = @(
+                    $machinePath -split ';' |
+                        Where-Object { $_ -and $_.Trim() -and ($_ -ne $modulesDir) }
+                ) -join ';'
+                if ($next -ne $machinePath) {
+                    if ([string]::IsNullOrWhiteSpace($next)) {
+                        [Environment]::SetEnvironmentVariable('PSModulePath', $null, 'Machine')
+                    } else {
+                        [Environment]::SetEnvironmentVariable('PSModulePath', $next, 'Machine')
+                    }
+                    Write-Output "[HATCH:INFO][cleanup] Removed Hatchery modules dir from Machine PSModulePath"
+                }
+            }
             foreach ($name in @(
                 'HATCHERY_ROOT',
                 'HATCHERY_LOGS',
                 'HATCHERY_TEMP',
-                'HATCHERY_SOFTWARE'
+                'HATCHERY_SOFTWARE',
+                'HATCHERY_MODULES'
             )) {
                 [Environment]::SetEnvironmentVariable($name, $null, 'Machine')
                 Remove-Item -Path "Env:$name" -ErrorAction SilentlyContinue
             }
-            Write-HatchEvent "Cleared persisted Hatchery Machine environment variables" `
-                -Component 'cleanup'
+            Write-Output "[HATCH:INFO][cleanup] Cleared persisted Hatchery Machine environment variables"
         }
     }
 )
