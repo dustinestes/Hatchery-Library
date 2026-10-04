@@ -50,6 +50,83 @@ function Write-HatchEvent {
     } catch { }
 }
 
+function Install-HatcheryOpenSshServerFromGitHub {
+    <#
+    .SYNOPSIS
+      Install OpenSSH Server from the latest PowerShell/Win32-OpenSSH Win64 MSI.
+
+    .NOTES
+      Hatchery ADR-0029 / issue #518. Do not use Add-WindowsCapability (Windows Update
+      FoD); that path is multi-minute in lab while this MSI is seconds-class.
+      Upstream after early semver ships only Beta/Preview tags; we still take latest.
+    #>
+    $ProgressPreference = 'SilentlyContinue'
+
+    $svc = Get-Service -Name sshd -ErrorAction SilentlyContinue
+    $sshdExe = Join-Path ${env:ProgramFiles} 'OpenSSH\sshd.exe'
+    if ($svc -and (Test-Path -LiteralPath $sshdExe)) {
+        Write-HatchEvent "OpenSSH Server already present at $sshdExe; skipping MSI download" `
+            -Component 'ssh'
+        return
+    }
+
+    $api = 'https://api.github.com/repos/PowerShell/Win32-OpenSSH/releases/latest'
+    Write-HatchEvent "Resolving latest OpenSSH Win64 MSI from GitHub releases" -Component 'ssh'
+    $headers = @{
+        'User-Agent' = 'Hatchery-first-boot'
+        'Accept'     = 'application/vnd.github+json'
+    }
+    $release = Invoke-RestMethod -Uri $api -Headers $headers
+    $asset = @(
+        $release.assets |
+            Where-Object { $_.name -like 'OpenSSH-Win64-*.msi' }
+    ) | Select-Object -First 1
+    if (-not $asset) {
+        throw "No OpenSSH-Win64-*.msi asset on release $($release.tag_name)"
+    }
+
+    $msi = Join-Path $env:TEMP $asset.name
+    Write-HatchEvent (
+        "Downloading OpenSSH MSI tag=$($release.tag_name) asset=$($asset.name) " +
+        "bytes=$($asset.size)"
+    ) -Component 'ssh'
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $msi -UseBasicParsing `
+        -Headers @{ 'User-Agent' = 'Hatchery-first-boot' }
+
+    if (-not (Test-Path -LiteralPath $msi) -or ((Get-Item -LiteralPath $msi).Length -lt 1MB)) {
+        throw "Downloaded MSI missing or too small: $msi"
+    }
+
+    $msiLog = Join-Path $env:TEMP 'hatchery-openssh-msi.log'
+    Write-HatchEvent "Running msiexec ADDLOCAL=Server for $($asset.name)" -Component 'ssh'
+    $p = Start-Process -FilePath 'msiexec.exe' `
+        -ArgumentList "/i `"$msi`" ADDLOCAL=Server /qn /norestart /l*v `"$msiLog`"" `
+        -Wait -PassThru
+    if ($p.ExitCode -notin 0, 3010) {
+        throw "msiexec OpenSSH Server failed exit $($p.ExitCode); see $msiLog"
+    }
+    Write-HatchEvent "msiexec finished exit=$($p.ExitCode) tag=$($release.tag_name)" `
+        -Component 'ssh'
+
+    $sshDir = Join-Path ${env:ProgramFiles} 'OpenSSH'
+    if (-not (Test-Path -LiteralPath (Join-Path $sshDir 'sshd.exe'))) {
+        throw "sshd.exe not found after MSI install under $sshDir"
+    }
+    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    if ($machinePath -notlike "*$sshDir*") {
+        [Environment]::SetEnvironmentVariable(
+            'Path',
+            ($machinePath.TrimEnd(';') + ';' + $sshDir),
+            'Machine'
+        )
+        Write-HatchEvent "Appended $sshDir to Machine PATH" -Component 'ssh'
+    }
+
+    try {
+        Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue
+    } catch { }
+}
+
 # Each step is one object: label, UI status, event component, and action stay together.
 # To skip a step locally, comment out or remove the whole object from this list.
 $script:Steps = @(
@@ -106,11 +183,13 @@ $script:Steps = @(
         }
     }
     [pscustomobject]@{
+        # ADR-0029 / Hatchery #518: GitHub Win32-OpenSSH MSI (not Windows Update FoD).
+        # Resolves latest Win64 Server MSI; FoD Add-WindowsCapability is intentionally unused.
         Name      = "Install OpenSSH Server"
         Component = "ssh"
         Status    = "[ ]"
         Action    = {
-            Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+            Install-HatcheryOpenSshServerFromGitHub
         }
     }
     [pscustomobject]@{
