@@ -3,6 +3,11 @@
 # hatchery-cleanup-macos.sh
 # Removes Hatchery guest directories and their contents.
 #
+# Guest environment ensure catalog (#554 / ADR-0032): macOS payload
+# and matching cleanup land in Hatchery #558. Until then this script
+# only wipes known guest roots. Extend here when ensure installs
+# helpers / persisted env on macOS - do not invent a parallel path.
+#
 # Add as the LAST script in a Clutch automations list if you
 # want no Hatchery artifacts left after provisioning.
 #
@@ -27,13 +32,13 @@ else
   echo "Hatchery guest directory removed"
 fi
 
-# Optional: remove persisted reserved env vars when macOS persist lands (#501 / #482).
-# Directory wipe above is the default cleanup path. Uncomment / adapt when used:
+# Stub: clear persisted reserved env + ensure helpers when #558 lands.
+# Directory wipe above removes tree-installed helpers once those exist.
 #
 # for name in HATCHERY_ROOT HATCHERY_LOGS HATCHERY_TEMP HATCHERY_SOFTWARE; do
 #   # e.g. remove from /etc/paths.d or a launchd plist Hatchery wrote
 #   unset "$name" || true
 # done
-# echo "Cleared persisted Hatchery environment variables (stub)"
+# echo "Cleared persisted Hatchery environment variables (stub until #558)"
 
 exit 0
