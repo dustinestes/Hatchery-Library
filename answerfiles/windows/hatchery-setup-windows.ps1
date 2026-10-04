@@ -1,15 +1,16 @@
 # ============================================================
-# hatchery-setup.ps1
+# hatchery-setup-windows.ps1
 # Companion first-boot setup packed with Autounattend.xml.
 # Launched by the single FirstLogonCommand in the Answer File.
 #
 # Unlike automation scripts under scripts/, this runs on the guest
 # console during OOBE FirstLogon - before Hatchery can inject
-# Write-HatchEvent over WinRM. The shim below matches the Controller
-# line format so hatchery-setup.log imports into hatch_events once
-# WinRM is up and the hatchery-ready flag exists.
+# Write-HatchEvent or persist HATCHERY_* env (ADR-0026). Paths are
+# the locked Windows guest defaults. The shim below matches the
+# Controller line format so hatchery-setup-windows.log imports into
+# hatch_events once Guest transport is up and hatchery-ready exists.
 #
-# Conventions (aligned with hatchery-script-template-windows.ps1):
+# Conventions (aligned with hatchery-cleanup-windows.ps1):
 #   - Use Write-HatchEvent for progress lines
 #   - $ErrorActionPreference = "Stop"
 #   - Keep each step's Name + Action on the same object so commenting
@@ -21,14 +22,24 @@ $Host.UI.RawUI.WindowTitle = "Hatchery - First Boot Setup"
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$script:HatcheryDir = "C:\Program Files\Hatchery"
-$null = New-Item -Path "$script:HatcheryDir\logs" -ItemType Directory -Force
-$null = New-Item -Path "$script:HatcheryDir\temp" -ItemType Directory -Force
+# Locked Windows guest paths (ADR-0025). HATCHERY_* env is not available yet
+# at FirstLogon - Controller persist runs after hatchery-ready (#501 / ADR-0026).
+$script:HatcheryRoot = "C:\Program Files\Hatchery"
+$script:HatcheryLogs = Join-Path $script:HatcheryRoot "logs"
+$script:HatcheryTemp = Join-Path $script:HatcheryRoot "temp"
+$null = New-Item -Path $script:HatcheryLogs -ItemType Directory -Force
+$null = New-Item -Path $script:HatcheryTemp -ItemType Directory -Force
 # Same path Hatchery imports after check_setup_complete (provision.SETUP_LOG_FILE).
-$script:HatchLogFile = "$script:HatcheryDir\logs\hatchery-setup.log"
+$script:HatchLogFile = Join-Path $script:HatcheryLogs "hatchery-setup-windows.log"
+$script:UiTitle = "First Boot Setup"
+
+try {
+    $Host.UI.RawUI.BackgroundColor = "Black"
+    $Host.UI.RawUI.ForegroundColor = "White"
+} catch { }
 
 # Compatible with Hatchery's injected Write-HatchEvent (stdout + timestamped log line).
-# Do not rely on Controller injection here; FirstLogon has no WinRM session yet.
+# Do not rely on Controller injection here; FirstLogon has no remoting session yet.
 function Write-HatchEvent {
     param(
         [Parameter(Mandatory)]
@@ -48,6 +59,17 @@ function Write-HatchEvent {
     try {
         Add-Content -Path $script:HatchLogFile -Value $line -Encoding UTF8
     } catch { }
+}
+
+function Show-HatcheryBanner {
+    Write-Host @"
+ _   _    _  _____  ____ _   _ _____ ______   __
+| | | |  / \|_   _|/ ___| | | | ____|  _ \ \ / /
+| |_| | / _ \ | | | |   | |_| |  _| | |_) \ V /
+|  _  |/ ___ \| | | |___|  _  | |___|  _ < | |
+|_| |_/_/   \_\_|  \____|_| |_|_____|_| \_\|_|
+"@ -ForegroundColor White
+    Write-Host "  Hatch. Provision. Scale." -ForegroundColor DarkGray
 }
 
 function Install-HatcheryOpenSshServerFromGitHub {
@@ -167,6 +189,48 @@ $script:Steps = @(
         }
     }
     [pscustomobject]@{
+        # Hatchery #543 / Library #8: lab/dev posture for silent Software installs.
+        # LocalAccountTokenFilterPolicy (above) is WinRM token filter only - not the
+        # UAC slider. Never notify = ConsentPromptBehaviorAdmin=0 + PromptOnSecureDesktop=0.
+        # Takes effect for new remoting sessions after hatchery-ready; no reboot required.
+        Name      = "Set UAC to Never notify"
+        Component = "uac"
+        Status    = "[ ]"
+        Action    = {
+            $sysPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+            $backupPath = Join-Path $script:HatcheryTemp 'hatchery-uac-policy.json'
+
+            $consent = Get-ItemProperty -Path $sysPath -Name ConsentPromptBehaviorAdmin -ErrorAction SilentlyContinue
+            $secureDesktop = Get-ItemProperty -Path $sysPath -Name PromptOnSecureDesktop -ErrorAction SilentlyContinue
+            $backup = [ordered]@{
+                ConsentPromptBehaviorAdmin = if ($null -ne $consent) {
+                    [int]$consent.ConsentPromptBehaviorAdmin
+                } else {
+                    5
+                }
+                PromptOnSecureDesktop = if ($null -ne $secureDesktop) {
+                    [int]$secureDesktop.PromptOnSecureDesktop
+                } else {
+                    1
+                }
+            }
+            ($backup | ConvertTo-Json -Compress) | Set-Content -Path $backupPath -Encoding UTF8
+
+            New-ItemProperty `
+                -Path $sysPath `
+                -Name 'ConsentPromptBehaviorAdmin' `
+                -Value 0 `
+                -PropertyType DWORD `
+                -Force | Out-Null
+            New-ItemProperty `
+                -Path $sysPath `
+                -Name 'PromptOnSecureDesktop' `
+                -Value 0 `
+                -PropertyType DWORD `
+                -Force | Out-Null
+        }
+    }
+    [pscustomobject]@{
         Name      = "Open WinRM firewall rule (port 5985)"
         Component = "winrm"
         Status    = "[ ]"
@@ -229,31 +293,32 @@ $script:Steps = @(
         Component = "ready"
         Status    = "[ ]"
         Action    = {
-            New-Item -Path "$script:HatcheryDir\temp\hatchery-ready" -ItemType File -Force | Out-Null
+            New-Item -Path (Join-Path $script:HatcheryTemp 'hatchery-ready') -ItemType File -Force | Out-Null
         }
     }
 )
 
 function Show-Steps {
     param([string]$Footer = "")
-    Clear-Host
-    Write-Host ("-" * 50)
-    Write-Host "Hatchery - First Boot Setup"
-    Write-Host ("-" * 50)
-    Write-Host "Log file: $script:HatchLogFile"
-    Write-Host ("-" * 50)
+    try { Clear-Host } catch { }
+    Show-HatcheryBanner
+    Write-Host ("-" * 50) -ForegroundColor DarkGray
+    Write-Host "  $script:UiTitle" -ForegroundColor White
+    Write-Host ("-" * 50) -ForegroundColor DarkGray
+    Write-Host "  Log file: $script:HatchLogFile" -ForegroundColor DarkGray
+    Write-Host ("-" * 50) -ForegroundColor DarkGray
     for ($i = 0; $i -lt $script:Steps.Count; $i++) {
         $step = $script:Steps[$i]
         $color = switch ($step.Status) {
             "[>]" { "Yellow" }
             "[+]" { "Green" }
             "[!]" { "Red" }
-            default { "Gray" }
+            default { "DarkGray" }
         }
         Write-Host ("  {0} {1}. {2}" -f $step.Status, ($i + 1), $step.Name) -ForegroundColor $color
     }
-    Write-Host ("-" * 50)
-    if ($Footer) { Write-Host $Footer }
+    Write-Host ("-" * 50) -ForegroundColor DarkGray
+    if ($Footer) { Write-Host "  $Footer" -ForegroundColor White }
 }
 
 function Invoke-Step {
@@ -273,7 +338,7 @@ function Invoke-Step {
         Write-HatchEvent "Step failed: $($Step.Name) -- $_" -Level ERROR -Component $Step.Component
         Show-Steps ("Step failed: {0}" -f $_)
         Write-Host ""
-        Write-Host "Press any key to close..." -ForegroundColor DarkGray
+        Write-Host "  Press any key to close..." -ForegroundColor DarkGray
         $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         exit 1
     }
@@ -294,7 +359,7 @@ try {
     Write-HatchEvent "Setup failed: $_" -Level ERROR -Component "setup"
     Show-Steps ("Setup failed: {0}" -f $_)
     Write-Host ""
-    Write-Host "Press any key to close..." -ForegroundColor DarkGray
+    Write-Host "  Press any key to close..." -ForegroundColor DarkGray
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     exit 1
 }

@@ -61,6 +61,7 @@ In Hatchery (Library enabled):
 
 | Domain | Filter | Notes |
 |---|---|---|
+| Answer Files | `*answerfiles/*` | Autounattend templates + `hatchery-setup-windows.ps1` |
 | Scripts (Windows) | `scripts/windows/**/*.ps1` | PowerShell automations |
 | Scripts (Linux) | `scripts/linux/**/*.sh` | bash automations |
 | Scripts (macOS) | `scripts/macos/**/*.sh` | bash automations |
@@ -80,6 +81,8 @@ Public list/pull works without a PAT. Private forks need a token with contents r
 ## Layout
 
 ```text
+answerfiles/
+  windows/     Autounattend *.j2 + hatchery-setup-windows.ps1 companion
 scripts/
   windows/     *.ps1
   linux/       *.sh
@@ -123,6 +126,8 @@ Do not add two Scripts/Clutches/Media files that share the same leaf name under 
 | Retry demo | `hatchery-testretry-windows.ps1` | `hatchery-testretry-linux.sh` | `hatchery-testretry-macos.sh` |
 
 Retry demos write a flag under the guest OS temp directory (`$env:TEMP` on Windows, `/tmp` on Linux/macOS), exit `1` on the first run, then succeed on Hatchery retry.
+
+**Windows first-boot UAC (lab/dev):** `answerfiles/windows/hatchery-setup-windows.ps1` sets UAC to Never notify so silent Software installs work over Guest transport (Hatchery [#543](https://github.com/dustinestes/Hatchery/issues/543)). That is weaker than the default Windows slider; it is intentional for reliable `msiexec /qn` in hatches. `hatchery-cleanup-windows.ps1` restores the prior values (or Windows defaults) before wiping the Hatchery guest root (`HATCHERY_ROOT`). Controllers with a cached pull must re-pull Answer Files and Scripts to pick this up.
 
 ---
 

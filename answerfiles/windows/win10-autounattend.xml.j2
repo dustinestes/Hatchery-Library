@@ -3,7 +3,7 @@ hatchery:
   kind: windows_unattend
   guest_os: [win10]
   companions:
-    - hatchery-setup.ps1
+    - hatchery-setup-windows.ps1
   parameters:
     - name: input_locale
       label: Input locale
@@ -122,7 +122,7 @@ hatchery:
       <FirstLogonCommands>
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
-          <CommandLine>powershell.exe -ExecutionPolicy Bypass -File "A:\hatchery-setup.ps1"</CommandLine>
+          <CommandLine>powershell.exe -ExecutionPolicy Bypass -File "A:\hatchery-setup-windows.ps1"</CommandLine>
           <RequiresUserInput>false</RequiresUserInput>
         </SynchronousCommand>
       </FirstLogonCommands>
