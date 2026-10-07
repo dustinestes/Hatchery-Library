@@ -27,7 +27,11 @@ platforms:
           }
           # Pin --source winget so hatch/automation does not hit msstore agreements/geo.
           winget install -e --id RedHat.VirtIO --version 0.1.285-1 --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-          exit [int]$LASTEXITCODE
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'installer produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
         success_exit_codes: [0]
         reboot_after: true
       post_install: []
@@ -39,7 +43,11 @@ platforms:
             exit 1
           }
           winget uninstall -e --id RedHat.VirtIO --source winget --silent --disable-interactivity
-          exit [int]$LASTEXITCODE
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'installer produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
         success_exit_codes: [0]
       detect:
         command: |

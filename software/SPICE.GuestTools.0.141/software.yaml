@@ -22,7 +22,11 @@ platforms:
           Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing
           # Prefer cmd /c over Start-Process -Wait (WinRM filtered-token hangs).
           cmd.exe /c "`"$exe`" /S"
-          exit [int]$LASTEXITCODE
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'installer produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
         success_exit_codes: [0]
         reboot_after: true
       post_install: []
@@ -49,7 +53,11 @@ platforms:
             exit 1
           }
           cmd.exe /c "`"$path`" /S"
-          exit [int]$LASTEXITCODE
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'installer produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
         success_exit_codes: [0]
       detect:
         command: |
