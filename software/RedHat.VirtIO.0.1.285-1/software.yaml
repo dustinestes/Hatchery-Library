@@ -1,7 +1,14 @@
-# YAML-only / online Software sample (#561): winget install of VirtIO guest tools/drivers.
-# Same guest-tools package as on the virtio-win ISO (no ISO attach required for post-install).
+# YAML-only / online Software sample (#561): winget install of virtio-win-guest-tools (Burn).
+# Full payload - installs nested products together (not a single lone ARP row):
+#   - Virtio-win-guest-tools (visible Burn parent)
+#   - Virtio-win-driver-installer (MSI; SystemComponent=1, hidden in Programs and Features)
+#   - QEMU guest agent (MSI; SystemComponent=1; also available alone as
+#     SoftwareFreedomConservancy.QEMUGuestAgent.110.0.2 for individual install)
+# Prefer this package for post-install VirtIO + agent in one step (no ISO attach).
 # During Windows Setup, attaching VirtIO media is still preferred for viostor load.
-# Requires winget (or Microsoft.DesktopAppInstaller Software first). Winget id: RedHat.VirtIO.
+# Do not also add SoftwareFreedomConservancy.QEMUGuestAgent unless you need agent-only
+# on guests without this full payload (uninstall of Burn removes nested qemu-ga).
+# Requires winget (or Microsoft.DesktopAppInstaller first). Winget id: RedHat.VirtIO.
 hatchery:
   kind: software
   publisher: RedHat

@@ -1,6 +1,9 @@
-# YAML-only / online Software sample (#561): winget install of QEMU Guest Agent.
-# Requires winget on the guest (Win11 eval often ships it; else pull Microsoft.DesktopAppInstaller first).
-# No windows/{arch}/ payload tree. Winget id: SoftwareFreedomConservancy.QEMUGuestAgent.
+# YAML-only / online Software sample (#561): winget install of QEMU Guest Agent only.
+# Individual install - use when you want qemu-ga without VirtIO drivers.
+# Also installed as a nested component of RedHat.VirtIO.0.1.285-1 (virtio-win-guest-tools Burn);
+# skip this package if that full payload is already in the Clutch.
+# Requires winget (or Microsoft.DesktopAppInstaller first). Winget id: SoftwareFreedomConservancy.QEMUGuestAgent.
+# Nested ARP may set SystemComponent=1 (hidden in Programs and Features).
 hatchery:
   kind: software
   publisher: SoftwareFreedomConservancy

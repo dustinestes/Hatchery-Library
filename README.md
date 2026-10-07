@@ -147,8 +147,8 @@ Retry demos write a flag under the guest OS temp directory (`$env:TEMP` on Windo
 | `media/virtio/virtio-win-0.1.285_slim.iso` | Slim VirtIO drivers ISO (~29MB) for Media → VirtIO bindings |
 | `software/Hatchery.SoftwareExample.1.0.0/` | Offline multi-arch MSI sample |
 | `software/Microsoft.DesktopAppInstaller.1.29.380/` | YAML-only: HTTPS bootstrap of winget (opt-in) |
-| `software/SoftwareFreedomConservancy.QEMUGuestAgent.110.0.2/` | YAML-only: `winget install` (qemu-ga) |
-| `software/RedHat.VirtIO.0.1.285-1/` | YAML-only: `winget install` (VirtIO guest tools; no ISO) |
+| `software/SoftwareFreedomConservancy.QEMUGuestAgent.110.0.2/` | YAML-only: `winget` qemu-ga **only** (also nested inside `RedHat.VirtIO`) |
+| `software/RedHat.VirtIO.0.1.285-1/` | YAML-only: `winget` full virtio-win-guest-tools Burn (drivers + qemu-ga; no ISO) |
 | `software/SPICE.GuestTools.0.141/` | YAML-only: HTTPS download + silent EXE |
 
 Replace `os_media` in the demo Clutch with a real Windows eval ISO before hatching a guest. VirtIO attribution: [NOTICE.md](NOTICE.md).
@@ -161,7 +161,10 @@ Same schema everywhere (`platforms.{os}.{arch}` + install / uninstall / detect).
 
 **2. HTTPS download** (`SPICE.GuestTools.0.141`) - yaml only; `install.command` downloads a known URL on the guest and runs the installer.
 
-**3. Winget** (`SoftwareFreedomConservancy.QEMUGuestAgent.110.0.2`, `RedHat.VirtIO.0.1.285-1`) - yaml only; `install.command` calls `winget install …`. Put `Microsoft.DesktopAppInstaller.1.29.380` earlier in Clutch `automations` when the guest lacks App Installer (not baked into hatchery-setup). VirtIO via winget is a post-install alternative to attaching the virtio-win ISO + `install-virtio-drivers-windows.ps1`; Setup-time `viostor` still wants media attached.
+**3. Winget** - yaml only; `install.command` calls `winget install …`. Put `Microsoft.DesktopAppInstaller.1.29.380` earlier in Clutch `automations` when the guest lacks App Installer (not baked into hatchery-setup).
+
+- `RedHat.VirtIO.0.1.285-1` - **full** virtio-win-guest-tools Burn (drivers MSI + qemu-ga nested; post-install, no ISO). Setup-time `viostor` still wants media attached.
+- `SoftwareFreedomConservancy.QEMUGuestAgent.110.0.2` - **individual** qemu-ga only; skip if `RedHat.VirtIO` is already selected (Burn uninstall removes nested agent).
 
 ```yaml
 # Offline (payload tree present)
