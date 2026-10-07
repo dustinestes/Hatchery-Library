@@ -166,6 +166,8 @@ Same schema everywhere (`platforms.{os}.{arch}` + install / uninstall / detect).
 - `RedHat.VirtIO.0.1.285-1` - **full** virtio-win-guest-tools Burn (drivers MSI + qemu-ga nested; post-install, no ISO). Setup-time `viostor` still wants media attached.
 - `SoftwareFreedomConservancy.QEMUGuestAgent.110.0.2` - **individual** qemu-ga only; skip if `RedHat.VirtIO` is already selected (Burn uninstall removes nested agent).
 
+Never use `exit [int]$LASTEXITCODE` after a native installer (`[int]$null` is `0`). Check null, then `exit $LASTEXITCODE` (Hatchery [#546](https://github.com/dustinestes/Hatchery/issues/546)).
+
 ```yaml
 # Offline (payload tree present)
 platforms:
@@ -174,6 +176,11 @@ platforms:
       install:
         command: |
           msiexec.exe /i $env:HATCHERY_SOFTWARE_PACKAGE\Setup.msi /qn /norestart
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'msiexec produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
       uninstall: { command: '…' }
       detect: { command: '…' }
 

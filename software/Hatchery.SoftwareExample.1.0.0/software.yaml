@@ -5,6 +5,7 @@
 # Arch-tagged MSI leaf names match typical vendor builds; install.command differs per unit.
 # install: msiexec + /l*v via $env:HATCHERY_SOFTWARE_LOG (Hatchery #501 reserved env).
 # Avoid Start-Process -Wait over WinRM: msiexec can hang on a filtered admin token.
+# Never exit [int]$LASTEXITCODE ([int]$null is 0); check null then exit $LASTEXITCODE (Hatchery #546).
 # detect: compact ARP scan (Publisher + DisplayName + DisplayVersion), not ProductCode.
 # Env names are cross-guest; Windows units use PowerShell $env:; POSIX units would use $NAME.
 hatchery:
@@ -26,16 +27,28 @@ platforms:
           $log = $env:HATCHERY_SOFTWARE_LOG
           $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
           msiexec.exe /i $msi /qn /norestart /l*v $log
-          exit [int]$LASTEXITCODE
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'msiexec produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
         success_exit_codes: [0]
         reboot_after: false
+        retry:
+          max_attempts: 3
+          delay_seconds: 15
+          on_null_exit: true
       post_install: []
       uninstall:
         command: |
           $log = $env:HATCHERY_SOFTWARE_LOG
           $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
           msiexec.exe /x '{3624F187-6C0A-4D29-BF3C-207C0981DE15}' /qn /norestart /l*v $log
-          exit [int]$LASTEXITCODE
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'msiexec produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
         success_exit_codes: [0, 1605]
       detect:
         command: |
@@ -64,16 +77,28 @@ platforms:
           $log = $env:HATCHERY_SOFTWARE_LOG
           $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
           msiexec.exe /i $msi /qn /norestart /l*v $log
-          exit [int]$LASTEXITCODE
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'msiexec produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
         success_exit_codes: [0]
         reboot_after: false
+        retry:
+          max_attempts: 3
+          delay_seconds: 15
+          on_null_exit: true
       post_install: []
       uninstall:
         command: |
           $log = $env:HATCHERY_SOFTWARE_LOG
           $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
           msiexec.exe /x '{3624F187-6C0A-4D29-BF3C-207C0981DE15}' /qn /norestart /l*v $log
-          exit [int]$LASTEXITCODE
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'msiexec produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
         success_exit_codes: [0, 1605]
       detect:
         command: |
@@ -102,16 +127,28 @@ platforms:
           $log = $env:HATCHERY_SOFTWARE_LOG
           $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
           msiexec.exe /i $msi /qn /norestart /l*v $log
-          exit [int]$LASTEXITCODE
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'msiexec produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
         success_exit_codes: [0]
         reboot_after: false
+        retry:
+          max_attempts: 3
+          delay_seconds: 15
+          on_null_exit: true
       post_install: []
       uninstall:
         command: |
           $log = $env:HATCHERY_SOFTWARE_LOG
           $null = New-Item -Path (Split-Path -Parent $log) -ItemType Directory -Force
           msiexec.exe /x '{3624F187-6C0A-4D29-BF3C-207C0981DE15}' /qn /norestart /l*v $log
-          exit [int]$LASTEXITCODE
+          if ($null -eq $LASTEXITCODE) {
+            Write-Error 'msiexec produced no exit code'
+            exit 255
+          }
+          exit $LASTEXITCODE
         success_exit_codes: [0, 1605]
       detect:
         command: |
