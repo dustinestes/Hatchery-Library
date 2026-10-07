@@ -25,7 +25,8 @@ platforms:
             Write-Error 'winget not found; install Microsoft.DesktopAppInstaller Software first or use an image with App Installer'
             exit 1
           }
-          winget install -e --id RedHat.VirtIO --version 0.1.285-1 --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          # Pin --source winget so hatch/automation does not hit msstore agreements/geo.
+          winget install -e --id RedHat.VirtIO --version 0.1.285-1 --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           exit [int]$LASTEXITCODE
         success_exit_codes: [0]
         reboot_after: true
@@ -37,7 +38,7 @@ platforms:
             Write-Error 'winget not found'
             exit 1
           }
-          winget uninstall -e --id RedHat.VirtIO --silent --disable-interactivity
+          winget uninstall -e --id RedHat.VirtIO --source winget --silent --disable-interactivity
           exit [int]$LASTEXITCODE
         success_exit_codes: [0]
       detect:

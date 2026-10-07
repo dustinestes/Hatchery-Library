@@ -194,7 +194,7 @@ platforms:
     x64:
       install:
         command: |
-          winget install -e --id Publisher.Product --silent --accept-package-agreements --accept-source-agreements
+          winget install -e --id Publisher.Product --source winget --silent --accept-package-agreements --accept-source-agreements
       uninstall: { command: '…' }
       detect: { command: '…' }
 ```

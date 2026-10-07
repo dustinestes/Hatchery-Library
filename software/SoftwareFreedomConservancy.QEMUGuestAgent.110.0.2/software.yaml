@@ -20,7 +20,8 @@ platforms:
             Write-Error 'winget not found; install Microsoft.DesktopAppInstaller Software first or use an image with App Installer'
             exit 1
           }
-          winget install -e --id SoftwareFreedomConservancy.QEMUGuestAgent --version 110.0.2 --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          # Pin --source winget so hatch/automation does not hit msstore agreements/geo.
+          winget install -e --id SoftwareFreedomConservancy.QEMUGuestAgent --version 110.0.2 --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           exit [int]$LASTEXITCODE
         success_exit_codes: [0]
         reboot_after: false
@@ -32,7 +33,7 @@ platforms:
             Write-Error 'winget not found'
             exit 1
           }
-          winget uninstall -e --id SoftwareFreedomConservancy.QEMUGuestAgent --silent --disable-interactivity
+          winget uninstall -e --id SoftwareFreedomConservancy.QEMUGuestAgent --source winget --silent --disable-interactivity
           exit [int]$LASTEXITCODE
         success_exit_codes: [0]
       detect:
