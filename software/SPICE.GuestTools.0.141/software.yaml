@@ -1,0 +1,67 @@
+# YAML-only / online Software sample (#561): HTTPS download + silent EXE install.
+# Full SPICE Guest Tools (QXL + vdagent). Not the same as winget Spice.VDAgent (agent-only).
+# Upstream silent: spice-guest-tools-*.exe /S (docs prefer Local System for driver prompts).
+# No windows/{arch}/ payload tree.
+hatchery:
+  kind: software
+  publisher: SPICE
+  product: GuestTools
+  version: "0.141"
+platforms:
+  windows:
+    x64:
+      pre_install: []
+      install:
+        command: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $url = 'https://www.spice-space.org/download/windows/spice-guest-tools/spice-guest-tools-0.141/spice-guest-tools-0.141.exe'
+          $dir = Join-Path $env:TEMP 'hatchery-SPICE-GuestTools'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $exe = Join-Path $dir 'spice-guest-tools-0.141.exe'
+          Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing
+          # Prefer cmd /c over Start-Process -Wait (WinRM filtered-token hangs).
+          cmd.exe /c "`"$exe`" /S"
+          exit [int]$LASTEXITCODE
+        success_exit_codes: [0]
+        reboot_after: true
+      post_install: []
+      uninstall:
+        command: |
+          $ErrorActionPreference = 'Stop'
+          $uninst = $null
+          foreach ($root in @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )) {
+            Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+              $i = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+              if ($i.DisplayName -like '*SPICE Guest Tools*' -and $i.UninstallString) {
+                $uninst = [string]$i.UninstallString
+              }
+            }
+          }
+          if (-not $uninst) { exit 0 }
+          # ARP may be a quoted path without .exe (NSIS); strip quotes then /S.
+          $path = $uninst.Trim().Trim('"')
+          if (-not (Test-Path -LiteralPath $path)) {
+            Write-Error "uninstall path missing: $path"
+            exit 1
+          }
+          cmd.exe /c "`"$path`" /S"
+          exit [int]$LASTEXITCODE
+        success_exit_codes: [0]
+      detect:
+        command: |
+          foreach ($root in @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )) {
+            Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+              $i = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+              if ($i.DisplayName -like '*SPICE Guest Tools*') { exit 0 }
+            }
+          }
+          $svc = Get-Service -Name 'vdservice' -ErrorAction SilentlyContinue
+          if ($svc) { exit 0 }
+          exit 1

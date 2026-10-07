@@ -1,0 +1,62 @@
+# YAML-only / online Software sample (#561): winget install of virtio-win-guest-tools (Burn).
+# Full payload - installs nested products together (not a single lone ARP row):
+#   - Virtio-win-guest-tools (visible Burn parent)
+#   - Virtio-win-driver-installer (MSI; SystemComponent=1, hidden in Programs and Features)
+#   - QEMU guest agent (MSI; SystemComponent=1; also available alone as
+#     SoftwareFreedomConservancy.QEMUGuestAgent.110.0.2 for individual install)
+# Prefer this package for post-install VirtIO + agent in one step (no ISO attach).
+# During Windows Setup, attaching VirtIO media is still preferred for viostor load.
+# Do not also add SoftwareFreedomConservancy.QEMUGuestAgent unless you need agent-only
+# on guests without this full payload (uninstall of Burn removes nested qemu-ga).
+# Requires winget (or Microsoft.DesktopAppInstaller first). Winget id: RedHat.VirtIO.
+hatchery:
+  kind: software
+  publisher: RedHat
+  product: VirtIO
+  version: "0.1.285-1"
+platforms:
+  windows:
+    x64:
+      pre_install: []
+      install:
+        command: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Error 'winget not found; install Microsoft.DesktopAppInstaller Software first or use an image with App Installer'
+            exit 1
+          }
+          # Pin --source winget so hatch/automation does not hit msstore agreements/geo.
+          winget install -e --id RedHat.VirtIO --version 0.1.285-1 --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          exit [int]$LASTEXITCODE
+        success_exit_codes: [0]
+        reboot_after: true
+      post_install: []
+      uninstall:
+        command: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Error 'winget not found'
+            exit 1
+          }
+          winget uninstall -e --id RedHat.VirtIO --source winget --silent --disable-interactivity
+          exit [int]$LASTEXITCODE
+        success_exit_codes: [0]
+      detect:
+        command: |
+          foreach ($root in @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )) {
+            Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+              $i = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+              if ($i.DisplayName -like '*Virtio*guest*tools*' -or $i.DisplayName -like '*virtio-win-guest-tools*') {
+                exit 0
+              }
+            }
+          }
+          # Driver presence (post-install / after ISO script)
+          $inf = Get-WindowsDriver -Online -ErrorAction SilentlyContinue |
+            Where-Object { $_.OriginalFileName -match 'viostor|netkvm|vioscsi' } |
+            Select-Object -First 1
+          if ($inf) { exit 0 }
+          exit 1

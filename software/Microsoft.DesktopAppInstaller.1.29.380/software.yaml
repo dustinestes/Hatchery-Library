@@ -1,0 +1,58 @@
+# YAML-only / online Software sample (#561): HTTPS bootstrap of winget (App Installer).
+# Opt-in via Clutch Software order - not hatchery-setup. No windows/{arch}/ payload tree.
+# Pin matches winget-cli release v1.29.380 (msixbundle + Dependencies.zip).
+hatchery:
+  kind: software
+  publisher: Microsoft
+  product: DesktopAppInstaller
+  version: "1.29.380"
+platforms:
+  windows:
+    x64:
+      pre_install: []
+      install:
+        command: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $ver = 'v1.29.380'
+          $base = "https://github.com/microsoft/winget-cli/releases/download/$ver"
+          $dir = Join-Path $env:TEMP 'hatchery-DesktopAppInstaller'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $depsZip = Join-Path $dir 'DesktopAppInstaller_Dependencies.zip'
+          $bundle = Join-Path $dir 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle'
+          Invoke-WebRequest -Uri "$base/DesktopAppInstaller_Dependencies.zip" -OutFile $depsZip -UseBasicParsing
+          Invoke-WebRequest -Uri "$base/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile $bundle -UseBasicParsing
+          Expand-Archive -LiteralPath $depsZip -DestinationPath (Join-Path $dir 'deps') -Force
+          $depRoot = Join-Path $dir 'deps'
+          $archDir = Get-ChildItem -LiteralPath $depRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -in @('x64', 'X64') } |
+            Select-Object -First 1
+          if (-not $archDir) {
+            $archDir = Get-ChildItem -LiteralPath $depRoot -Directory | Select-Object -First 1
+          }
+          if ($archDir) {
+            Get-ChildItem -LiteralPath $archDir.FullName -Include '*.appx', '*.msix' -File -Recurse |
+              ForEach-Object { Add-AppxPackage -Path $_.FullName -ErrorAction Stop }
+          }
+          Add-AppxPackage -Path $bundle -ErrorAction Stop
+          $winget = Get-Command winget -ErrorAction SilentlyContinue
+          if (-not $winget) {
+            Write-Error 'winget not on PATH after App Installer install'
+            exit 1
+          }
+          exit 0
+        success_exit_codes: [0]
+        reboot_after: false
+      post_install: []
+      uninstall:
+        command: |
+          $pkg = Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction SilentlyContinue
+          if (-not $pkg) { exit 0 }
+          Remove-AppxPackage -Package $pkg.PackageFullName -ErrorAction Stop
+          exit 0
+        success_exit_codes: [0]
+      detect:
+        command: |
+          $pkg = Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction SilentlyContinue
+          if ($pkg -and (Get-Command winget -ErrorAction SilentlyContinue)) { exit 0 }
+          exit 1

@@ -1,0 +1,52 @@
+# YAML-only / online Software sample (#561): winget install of QEMU Guest Agent only.
+# Individual install - use when you want qemu-ga without VirtIO drivers.
+# Also installed as a nested component of RedHat.VirtIO.0.1.285-1 (virtio-win-guest-tools Burn);
+# skip this package if that full payload is already in the Clutch.
+# Requires winget (or Microsoft.DesktopAppInstaller first). Winget id: SoftwareFreedomConservancy.QEMUGuestAgent.
+# Nested ARP may set SystemComponent=1 (hidden in Programs and Features).
+hatchery:
+  kind: software
+  publisher: SoftwareFreedomConservancy
+  product: QEMU Guest Agent
+  version: "110.0.2"
+platforms:
+  windows:
+    x64:
+      pre_install: []
+      install:
+        command: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Error 'winget not found; install Microsoft.DesktopAppInstaller Software first or use an image with App Installer'
+            exit 1
+          }
+          # Pin --source winget so hatch/automation does not hit msstore agreements/geo.
+          winget install -e --id SoftwareFreedomConservancy.QEMUGuestAgent --version 110.0.2 --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          exit [int]$LASTEXITCODE
+        success_exit_codes: [0]
+        reboot_after: false
+      post_install: []
+      uninstall:
+        command: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Error 'winget not found'
+            exit 1
+          }
+          winget uninstall -e --id SoftwareFreedomConservancy.QEMUGuestAgent --source winget --silent --disable-interactivity
+          exit [int]$LASTEXITCODE
+        success_exit_codes: [0]
+      detect:
+        command: |
+          $svc = Get-Service -Name 'qemu-ga' -ErrorAction SilentlyContinue
+          if ($svc) { exit 0 }
+          foreach ($root in @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+          )) {
+            Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+              $i = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+              if ($i.DisplayName -like '*QEMU*guest*agent*') { exit 0 }
+            }
+          }
+          exit 1
