@@ -1,23 +1,27 @@
 #!/usr/bin/env bash
 # ============================================================
-# hatchery-testretry-macos.sh
+# test-retry-linux.sh
 # End-to-end test for Hatchery's retry mechanism.
+#
+# Lives under tests/scripts/ (not scripts/) so default Library
+# Script bindings do not pull it. Basename prefix test-.
 #
 # First run:  writes a flag under /tmp, then exits 1 so
 #             Hatchery marks the VM failed.
 # Retry run:  finds the flag, deletes it, exits 0 so Hatchery
 #             marks the script succeeded and continues automation.
 #
-# Flag path:  /tmp/hatchery-testretry-ran
+# Flag path:  /tmp/test-retry-ran
 #
-# Usage in a Clutch:
+# Usage in a Clutch (after enabling Test Scripts binding + pull):
 #   automations:
-#     - hatchery-testretry-macos.sh
+#     - type: script
+#       name: test-retry-linux.sh
 #     - <next script>   # only reached on the retry run
 # ============================================================
 set -euo pipefail
 
-FLAG_FILE="/tmp/hatchery-testretry-ran"
+FLAG_FILE="/tmp/test-retry-ran"
 
 if [[ -f "$FLAG_FILE" ]]; then
   echo "Retry flag found -- this is the retry run"

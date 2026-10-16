@@ -62,13 +62,17 @@ In Hatchery (Library enabled):
 | Domain | Filter | Notes |
 |---|---|---|
 | Answer Files | `*answerfiles/*` | Autounattend templates + `hatchery-setup-windows.ps1` |
-| Scripts (Windows) | `scripts/windows/**/*.ps1` | PowerShell automations |
-| Scripts (Linux) | `scripts/linux/**/*.sh` | bash automations |
-| Scripts (macOS) | `scripts/macos/**/*.sh` | bash automations |
+| Scripts | `scripts/*` | Production automations only (not `tests/scripts/`) |
+| Scripts (Windows only) | `scripts/windows/**/*.ps1` | Narrower optional filter |
+| Scripts (Linux only) | `scripts/linux/**/*.sh` | Narrower optional filter |
+| Scripts (macOS only) | `scripts/macos/**/*.sh` | Narrower optional filter |
+| Test Scripts | `tests/scripts/*` | Opt-in fixtures (`test-*`); Hatchery seeds this **disabled** |
 | Clutches | `clutches/**/*.yaml` | Demo Clutch YAML |
 | Media (ISO) | `media/iso/**/*.iso` | Binding target **iso** |
 | Media (VirtIO) | `media/virtio/**/*.iso` | Binding target **virtio** |
 | Software | `*software/*` | Package units (dir with `software.yaml`) |
+
+Do **not** use `*scripts/*` for production Scripts - that glob also matches `tests/scripts/…`.
 
 Public list/pull works without a PAT. Private forks need a token with contents read.
 
@@ -84,9 +88,14 @@ Public list/pull works without a PAT. Private forks need a token with contents r
 answerfiles/
   windows/     Autounattend *.j2 + hatchery-setup-windows.ps1 companion
 scripts/
-  windows/     *.ps1
+  windows/     *.ps1          # production automations
   linux/       *.sh
   macos/       *.sh
+tests/
+  scripts/                    # opt-in fixtures (mirror scripts/ layout)
+    windows/   test-*.ps1
+    linux/     test-*.sh
+    macos/     test-*.sh
 clutches/
   demo-windows.yaml
 media/
@@ -126,11 +135,27 @@ Do not add two Scripts/Clutches/Media files that share the same leaf name under 
 | Guest tools | `install-virtio-drivers-windows.ps1` | `install-qemu-guest-agent-linux.sh` | - |
 | Package cleanup | `remove-appx-windows.ps1` | - | - |
 | Hatchery cleanup | `hatchery-cleanup-windows.ps1` | `hatchery-cleanup-linux.sh` | `hatchery-cleanup-macos.sh` |
-| Retry demo | `hatchery-testretry-windows.ps1` | `hatchery-testretry-linux.sh` | `hatchery-testretry-macos.sh` |
 
 **Nest-prep (Windows Hyper-V Nest):** `authorize-hatchery-nest-ssh-windows.ps1` detects OpenSSH via ARP (MSI) or FoD capability (never overlays MSI on FoD; never `Add-WindowsCapability`); if missing, bootstraps the same GitHub Win64 MSI as `hatchery-setup-windows.ps1`, then ensures `sshd`/firewall and appends a Controller remoting identity pubkey (`-PublicKey` or `-PublicKeyPath`). `enable-hyperv-windows.ps1` enables the Hyper-V role (reboot may be required). Operator how-to: Hatchery [Getting Started - Remote Nest](https://github.com/dustinestes/Hatchery/blob/main/docs/getting-started.md) and [Nest SSH](https://github.com/dustinestes/Hatchery/blob/main/docs/nest-ssh.md) (Hatchery [#548](https://github.com/dustinestes/Hatchery/issues/548) / [#260](https://github.com/dustinestes/Hatchery/issues/260)).
 
-Retry demos write a flag under the guest OS temp directory (`$env:TEMP` on Windows, `/tmp` on Linux/macOS), exit `1` on the first run, then succeed on Hatchery retry.
+---
+
+<br/>
+
+## Test scripts (`tests/scripts/`)
+
+Fixtures for Hatchery development and validation - **not** for production Clutches. They mirror the production `scripts/{windows,linux,macos}/` layout and use a **`test-` basename prefix**.
+
+Default Hatchery Library **All Scripts** binding (`scripts/*`) does **not** include this tree. To pull fixtures: enable **Test Scripts** (`tests/scripts/*`) under Library → Connections (seeded **off** by default; Hatchery [#573](https://github.com/dustinestes/Hatchery/issues/573)), then pull from Content → Available.
+
+| Concern | Windows | Linux | macOS |
+|---|---|---|---|
+| Retry demo | `test-retry-windows.ps1` | `test-retry-linux.sh` | `test-retry-macos.sh` |
+| Typed param smoke | `test-param-smoke-windows.ps1` | - | - |
+
+**Retry demos** write a flag under the guest OS temp directory (`$env:TEMP` / `/tmp`), exit `1` on the first run, then succeed on Hatchery retry.
+
+**Typed param smoke (Windows):** exercises Clutch script parameter kinds and constraints (string + `ValidateSet` / `ValidateLength`, `[bool]`, `[switch]`, `[int]`, `[double]`). On the guest it dumps bound values via `Write-HatchEvent`, stdout, and a local file under `HATCHERY_LOGS` (or `$env:TEMP`). Hatchery [#571](https://github.com/dustinestes/Hatchery/issues/571).
 
 **Windows first-boot UAC (lab/dev):** `answerfiles/windows/hatchery-setup-windows.ps1` sets UAC to Never notify so silent Software installs work over Guest transport (Hatchery [#543](https://github.com/dustinestes/Hatchery/issues/543)). That is weaker than the default Windows slider; it is intentional for reliable `msiexec /qn` in hatches. `hatchery-cleanup-windows.ps1` restores the prior values (or Windows defaults) before wiping the Hatchery guest root (`HATCHERY_ROOT`). Controllers with a cached pull must re-pull Answer Files and Scripts to pick this up.
 
